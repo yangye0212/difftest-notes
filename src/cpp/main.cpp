@@ -1,21 +1,20 @@
 #include <cstdio>
 #include <cstdint>
 // verilator
-#include <VMyCounter.h>
-#define VCD_ENABLE
+#include <VSimTop.h>
+
+#define VCD_ENABLE  // gen vcd wave
 #ifdef VCD_ENABLE
-#include <verilated_vcd_c.h>	// Trace file format header
+#include <verilated_vcd_c.h>  // Trace file format header
 #endif
 
-enum {
-  RUN,
-  STOP
-};
+
 
 class Emu {
 private:
   /* data */
-  VMyCounter *dut;
+  VSimTop *dut;
+  enum { RUN, STOP };
   uint64_t state;
 #ifdef VCD_ENABLE
   VerilatedVcdC* tfp;
@@ -31,7 +30,7 @@ public:
   bool isFinish() { return state == STOP; }
 };
 
-Emu::Emu(/* args */): dut(new VMyCounter) {
+Emu::Emu(/* args */): dut(new VSimTop) {
 #ifdef VCD_ENABLE
   vcd_times = 0;
 #endif

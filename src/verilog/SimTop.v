@@ -62,3 +62,20 @@ end // initial
 `endif
 `endif // SYNTHESIS
 endmodule
+module SimTop(
+  input   clock,
+  input   reset,
+  output  io_tick
+);
+  wire  my_counter_clock; // @[Counter.scala 21:26]
+  wire  my_counter_reset; // @[Counter.scala 21:26]
+  wire  my_counter_io_tick; // @[Counter.scala 21:26]
+  MyCounter my_counter ( // @[Counter.scala 21:26]
+    .clock(my_counter_clock),
+    .reset(my_counter_reset),
+    .io_tick(my_counter_io_tick)
+  );
+  assign io_tick = my_counter_io_tick; // @[Counter.scala 22:11]
+  assign my_counter_clock = clock;
+  assign my_counter_reset = reset;
+endmodule

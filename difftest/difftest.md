@@ -44,7 +44,7 @@ while(1) {
 
 ### 简单例子——计数器
 
-我们先写一个简单的电路模块，比如用chisel写一个计数器，每个周期计数器加1，当达到最大值时向接口发出一个信号。
+> 我们需要一个verilog文件来进行一个小实验，选择用chisel来生成一个模块。写一个简单的电路模块，比如用chisel写一个计数器，每个周期计数器加1，当达到最大值时向接口发出一个信号。使用一个顶层模块（这里名称使用`SimTop`与香山一致的名称，也可使用其他任意符合命令规范的名称或不使用）来例化该模块。代码如下：
 
 #### chisel代码
 
@@ -65,11 +65,19 @@ class MyCounter(max: Int = 16) extends Module {
   io.tick := c.value === (max-1).U
 }
 
-object GenCounter extends App {
+class SimTop extends Module {
+  val io = IO(new Bundle() {
+    val tick = Output(Bool())
+  })
+  val my_counter = Module(new MyCounter())
+  io.tick := my_counter.io.tick
+}
+
+object SimTop extends App {
   (new chisel3.stage.ChiselStage).execute(
     Array("-X", "verilog", "--full-stacktrace"),
-    Seq(ChiselGeneratorAnnotation(() => new MyCounter()),
-      TargetDirAnnotation("build/counter"))
+    Seq(ChiselGeneratorAnnotation(() => new SimTop()),
+      TargetDirAnnotation("build/"))
   )
 }
 ```
@@ -78,211 +86,15 @@ object GenCounter extends App {
 
 使用 `scala`构建工具 `mill`生成verilog，**此处命令不唯一**
 
-```bash
-mill chiselModule.runMain mycounter.GenCounter 
-```
-
-在上面指定的输出目录下能看到
+在上面指定的输出目录`"build/"`下能看到
 
 ```bash
-MyCounter.anno.json  MyCounter.fir  MyCounter.v
-
+SimTop.anno.json  SimTop.fir  SimTop.v
 ```
 
-其中的 `MyCounter.v`为chisel生成的 `verilog`文件:
-
-```verilog
-module MyCounter(
-  input   clock,
-  input   reset,
-  output  io_tick
-);
-`ifdef RANDOMIZE_REG_INIT
-  reg [31:0] _RAND_0;
-`endif // RANDOMIZE_REG_INIT
-  reg [3:0] value; // @[Counter.scala 60:40]
-  wire [3:0] _value_T_1 = value + 4'h1; // @[Counter.scala 76:24]
-  assign io_tick = value == 4'hf; // @[Counter.scala 14:22]
-  always @(posedge clock) begin
-    if (reset) begin // @[Counter.scala 60:40]
-      value <= 4'h0; // @[Counter.scala 60:40]
-    end else begin
-      value <= _value_T_1; // @[Counter.scala 76:15]
-    end
-  end
-// Register and memory initialization
-`ifdef RANDOMIZE_GARBAGE_ASSIGN
-`define RANDOMIZE
-`endif
-`ifdef RANDOMIZE_INVALID_ASSIGN
-`define RANDOMIZE
-`endif
-`ifdef RANDOMIZE_REG_INIT
-`define RANDOMIZE
-`endif
-`ifdef RANDOMIZE_MEM_INIT
-`define RANDOMIZE
-`endif
-`ifndef RANDOM
-`define RANDOM $random
-`endif
-`ifdef RANDOMIZE_MEM_INIT
-  integer initvar;
-`endif
-`ifndef SYNTHESIS
-`ifdef FIRRTL_BEFORE_INITIAL
-`FIRRTL_BEFORE_INITIAL
-`endif
-initial begin
-  `ifdef RANDOMIZE
-    `ifdef INIT_RANDOM
-      `INIT_RANDOM
-    `endif
-    `ifndef VERILATOR
-      `ifdef RANDOMIZE_DELAY
-        #`RANDOMIZE_DELAY begin end
-      `else
-        #0.002 begin end
-      `endif
-    `endif
-`ifdef RANDOMIZE_REG_INIT
-  _RAND_0 = {1{`RANDOM}};
-  value = _RAND_0[3:0];
-`endif // RANDOMIZE_REG_INIT
-  `endif // RANDOMIZE
-end // initial
-`ifdef FIRRTL_AFTER_INITIAL
-`FIRRTL_AFTER_INITIAL
-`endif
-`endif // SYNTHESIS
-endmodule
-
-```
-
-#### 测试程序
-
-自定义仿真程序
-
-```cpp
-// main.cpp
-#include <cstdio>
-#include <cstdint>
-// verilator
-#include <VMyCounter.h>
-#define VCD_ENABLE
-#ifdef VCD_ENABLE
-#include <verilated_vcd_c.h>	// Trace file format header
-#endif
-
-enum {
-  RUN,
-  STOP
-};
-
-class Emu {
-private:
-  /* data */
-  VMyCounter *dut;
-  uint64_t state;
-#ifdef VCD_ENABLE
-  VerilatedVcdC* tfp;
-  uint64_t vcd_times;
-#endif
-public:
-  Emu(/* args */);
-  ~Emu();
-  void reset_n(uint64_t n);
-  void single_cycle();
-  void execute();
-  void update_state() { if(state == RUN && dut->io_tick == 1) state = STOP; }
-  bool isFinish() { return state == STOP; }
-};
-
-Emu::Emu(/* args */): dut(new VMyCounter) {
-#ifdef VCD_ENABLE
-  vcd_times = 0;
-#endif
-}
-
-Emu::~Emu() {
-  delete dut;
-}
-
-void Emu::reset_n(uint64_t n) {
-  while (n--) {
-    dut->reset = 1;
-    dut->clock = 0;
-    dut->eval();
-#ifdef VCD_ENABLE
-    tfp->dump(vcd_times++);
-#endif
-    dut->clock = 1;
-    dut->eval();
-    dut->reset = 0;
-#ifdef VCD_ENABLE
-    tfp->dump(vcd_times++);
-#endif
-  }
-}
-
-void Emu::single_cycle() {
-  dut->clock = 0;
-  dut->eval();
-#ifdef VCD_ENABLE
-  tfp->dump(vcd_times++);
-#endif
-  dut->clock = 1;
-  dut->eval();
-#ifdef VCD_ENABLE
-  tfp->dump(vcd_times++);
-#endif
-}
-
-void Emu::execute() {
-#ifdef VCD_ENABLE
-    Verilated::traceEverOn(true);	// Verilator must compute traced signals
-    VL_PRINTF("Enabling waves...\n");
-    tfp = new VerilatedVcdC;
-    dut->trace(tfp, 99);	// Trace 99 levels of hierarchy
-    tfp->open("build/emu_wave.vcd");	// Open the dump file
-#endif
-  // set state
-  state = RUN;
-  printf("\t simulation: start ...\t\n");
-  reset_n(2);
-  while (!isFinish()) {
-    // check emu state
-    update_state();
-    // run a cycle
-    single_cycle();
-  }
-#ifdef VCD_ENABLE
-  tfp->close();
-#endif
-  dut->final();
-  printf("\t simulation: end ...\t\n");
-}
+其中的 `SimTop.v`为chisel最终生成的`verilog`文件，将这个`verilog`文件放入到当前project的src/verilog目录下：
 
 
-int main() {
-  auto emu = new Emu;
-  emu->execute();
-  return 0;
-}
-```
-
-```bash
-yangye@xiangshan-54:~/projects/counter$ tree
-.
-├── Makefile
-└── src
-    ├── cpp
-    │   └── main.cpp
-    └── verilog
-        └── MyCounter.v
-
-3 directories, 3 files
-```
 
 #### verilator命令参数
 
@@ -333,27 +145,27 @@ Verilator 4.204 2021-06-12 rev v4.204
 ```bash
 yangye@xiangshan-54:~/projects/counter$ ll obj_dir/
 total 48
-drwxr-xr-x 2 yangye xs 4096 12月 20 18:11 ./
-drwxr-xr-x 4 yangye xs 4096 12月 20 18:11 ../
--rw-r--r-- 1 yangye xs 1604 12月 20 18:11 VMyCounter_classes.mk
--rw-r--r-- 1 yangye xs 4550 12月 20 18:11 VMyCounter.cpp
--rw-r--r-- 1 yangye xs 3279 12月 20 18:11 VMyCounter.h
--rw-r--r-- 1 yangye xs 1453 12月 20 18:11 VMyCounter.mk
--rw-r--r-- 1 yangye xs 2629 12月 20 18:11 VMyCounter__Slow.cpp
--rw-r--r-- 1 yangye xs  660 12月 20 18:11 VMyCounter__Syms.cpp
--rw-r--r-- 1 yangye xs  839 12月 20 18:11 VMyCounter__Syms.h
--rw-r--r-- 1 yangye xs  293 12月 20 18:11 VMyCounter__ver.d
--rw-r--r-- 1 yangye xs 1203 12月 20 18:11 VMyCounter__verFiles.dat
+drwxr-xr-x 2 yangye xs 4096 12月 24 10:55 ./
+drwxr-xr-x 7 yangye xs 4096 12月 24 10:55 ../
+-rw-r--r-- 1 yangye xs 1592 12月 24 10:55 VSimTop_classes.mk
+-rw-r--r-- 1 yangye xs 4556 12月 24 10:55 VSimTop.cpp
+-rw-r--r-- 1 yangye xs 3247 12月 24 10:55 VSimTop.h
+-rw-r--r-- 1 yangye xs 1438 12月 24 10:55 VSimTop.mk
+-rw-r--r-- 1 yangye xs 2564 12月 24 10:55 VSimTop__Slow.cpp
+-rw-r--r-- 1 yangye xs  639 12月 24 10:55 VSimTop__Syms.cpp
+-rw-r--r-- 1 yangye xs  818 12月 24 10:55 VSimTop__Syms.h
+-rw-r--r-- 1 yangye xs  266 12月 24 10:55 VSimTop__ver.d
+-rw-r--r-- 1 yangye xs 1170 12月 24 10:55 VSimTop__verFiles.dat
 ```
 
-> 我们可以查看 `verilog`抽象封装成的 `C++`类，在 `VMyCounter.h`声明，可以打开该文件，我们能看到封装的类和*顶层接口*以及定义的评估方法。该类里提供了两个方法：`eval()` or `eval_step()`。当这两个函数被调用时，Verilator查找时钟信号的变化并评估相关的顺序always块，例如计算 `always_ff @ (posedge…)`输出。然后Verilator评估组合逻辑。  
+> 我们可以查看 `verilog`抽象封装成的 `C++`类，在 `VSimTop.h`声明，可以打开该文件，我们能看到封装的类和*顶层接口*以及定义的评估方法。该类里提供了两个方法：`eval()` or `eval_step()`。当这两个函数被调用时，Verilator查找时钟信号的变化并评估相关的顺序always块，例如计算 `always_ff @ (posedge…)`输出。然后Verilator评估组合逻辑。  
 > 通俗来说，`eval()` or `eval_step()`方法的调用，会根据外部输入值来更新内部所有的信号。利用这个方法的功能，我们可以实现一个周期的仿真：顶层模块一般都有`clock`接口，可以给予clock接口一个高电平信号，调用`eval()` or `eval_step()`评估内部所有信号值，再给予clock接口一个低电平信号，再调用`eval()` or `eval_step()`评估内部所有信号值，这样就可以实现所设计的模块内所有信号值在一个时钟周期的仿真。再给这个过程以循环的方式，就达到了周期不断推进的仿真过程。
 
 
-执行生成的 `makefile`文件（`VMyCounter.mk`），会生成不同的二进制文件
+执行生成的 `makefile`文件（`VSimTop.mk`），会生成不同的二进制文件
 
 ```bash
-yangye@xiangshan-54:~/projects/counter$ make -C obj_dir/ -f VMyCounter.mk
+yangye@xiangshan-54:~/projects/counter$ make -C obj_dir/ -f VSimTop.mk
 ```
 
 生成二进制文件
@@ -361,96 +173,220 @@ yangye@xiangshan-54:~/projects/counter$ make -C obj_dir/ -f VMyCounter.mk
 ```bash
 yangye@xiangshan-54:~/projects/counter$ ll obj_dir/
 total 72
-drwxr-xr-x 2 yangye xs 4096 12月 20 18:12 ./
-drwxr-xr-x 4 yangye xs 4096 12月 20 18:11 ../
--rw-r--r-- 1 yangye xs 6516 12月 20 18:12 VMyCounter__ALL.a
--rw-r--r-- 1 yangye xs  182 12月 20 18:12 VMyCounter__ALL.cpp
--rw-r--r-- 1 yangye xs  293 12月 20 18:12 VMyCounter__ALL.d
--rw-r--r-- 1 yangye xs 5344 12月 20 18:12 VMyCounter__ALL.o
--rw-r--r-- 1 yangye xs 1604 12月 20 18:11 VMyCounter_classes.mk
--rw-r--r-- 1 yangye xs 4550 12月 20 18:11 VMyCounter.cpp
--rw-r--r-- 1 yangye xs 3279 12月 20 18:11 VMyCounter.h
--rw-r--r-- 1 yangye xs 1453 12月 20 18:11 VMyCounter.mk
--rw-r--r-- 1 yangye xs 2629 12月 20 18:11 VMyCounter__Slow.cpp
--rw-r--r-- 1 yangye xs  660 12月 20 18:11 VMyCounter__Syms.cpp
--rw-r--r-- 1 yangye xs  839 12月 20 18:11 VMyCounter__Syms.h
--rw-r--r-- 1 yangye xs  293 12月 20 18:11 VMyCounter__ver.d
--rw-r--r-- 1 yangye xs 1203 12月 20 18:11 VMyCounter__verFiles.dat
+drwxr-xr-x 2 yangye xs 4096 12月 24 10:57 ./
+drwxr-xr-x 7 yangye xs 4096 12月 24 10:55 ../
+-rw-r--r-- 1 yangye xs 6176 12月 24 10:57 VSimTop__ALL.a
+-rw-r--r-- 1 yangye xs  173 12月 24 10:57 VSimTop__ALL.cpp
+-rw-r--r-- 1 yangye xs  272 12月 24 10:57 VSimTop__ALL.d
+-rw-r--r-- 1 yangye xs 5200 12月 24 10:57 VSimTop__ALL.o
+-rw-r--r-- 1 yangye xs 1592 12月 24 10:55 VSimTop_classes.mk
+-rw-r--r-- 1 yangye xs 4556 12月 24 10:55 VSimTop.cpp
+-rw-r--r-- 1 yangye xs 3247 12月 24 10:55 VSimTop.h
+-rw-r--r-- 1 yangye xs 1438 12月 24 10:55 VSimTop.mk
+-rw-r--r-- 1 yangye xs 2564 12月 24 10:55 VSimTop__Slow.cpp
+-rw-r--r-- 1 yangye xs  639 12月 24 10:55 VSimTop__Syms.cpp
+-rw-r--r-- 1 yangye xs  818 12月 24 10:55 VSimTop__Syms.h
+-rw-r--r-- 1 yangye xs  266 12月 24 10:55 VSimTop__ver.d
+-rw-r--r-- 1 yangye xs 1170 12月 24 10:55 VSimTop__verFiles.dat
 ```
 如果说verilator生成的文件还需要用户自己写编译脚本将其加入到自己的仿真程序中这样不方便于用户的使用。
 为了快速地生成可执行文件，而不用让用户来手动添加这些文件到自己测试源文件中进行编译，
 
-> `verilator`在使用时将设计的 `Verilog/SystemVerilog`文件和编写仿真的源文件一起作为verilator的输入文件，编译后生成相应的Makefile文件会有相应的过程将封装出来的（由`Verilog/SystemVerilog`转换）文件与用户编写的测试源文件一起编译链接成最后的可执行文件(`.elf`)或动态链接库文件(`.so`)，用户只需执行生成的 `Makefile`文件即可生成最终的可执行文件(`.elf`)。  
+> `verilator`在使用时将设计的 `Verilog/SystemVerilog`文件和编写仿真的源文件一起作为`verilator`的输入文件，编译后生成相应的`Makefile`文件会有相应的过程将封装出来的（由`Verilog/SystemVerilog`转换）文件与用户编写的测试源文件一起编译链接成最后的可执行文件(`.elf`)或动态链接库文件(`.so`)，用户只需执行生成的 `Makefile`文件即可生成最终的可执行文件(`.elf`)。  
 
 接下来实验一下相关过程：  
-将仿真的源文件也作为verilator的输入文件（cpp源文件最好指定绝对路径，可编写Makefile来帮助我们快速构建执行过程）：
+#### 测试程序
+将仿真的源文件也作为`verilator`的输入文件（`cpp`源文件最好指定绝对路径，可编写`Makefile`来帮助我们快速构建执行过程）：
 
+首先编写自定义仿真程序，由上可知封装的文件的声明在头文件`VSimTop.h`(`Verilator`输出文件命名为`Verilog/SystemVerilog`的顶层模块的名称前面加大写`V`)，因此在我们的cpp文件里需要`#include <VSimTop.h>`(`src/cpp/main.cpp: 4`)，见源码`src/cpp/main.cpp`。  
+生成波形的相关代码由宏定义`VCD_ENABLE`来展开，该处直接在源文件中定义，`verilator`命令可以添加编译参数，也可在编译参数中来指定该宏定义。  
+构建一个名为Emu的类来将仿真的过程抽象，定义成员变量`VSimTop *dut;`，该变量指向所设计的`verilog`模块经`verilator`封装后的`C++`类，在构造函数中初始化：
+```cpp
+Emu::Emu(/* args */): dut(new VSimTop) {
+#ifdef VCD_ENABLE
+  vcd_times = 0;
+#endif
+}
+```
+
+定义方法`Emu::single_cycle()`实现周期推进，在上面已经了解了封装后的类提供`eval()`或`eval_step()`方法，因此可以通过给`clock`接口交替赋值交替调用`eval()`或`eval_step()`方法来实现一个周期的推进(宏`VCD_ENABLE`为波形生成的相关代码暂时不管)：
+```cpp
+void Emu::single_cycle() {
+  dut->clock = 0;
+  dut->eval();
+#ifdef VCD_ENABLE
+  tfp->dump(vcd_times++);
+#endif
+  dut->clock = 1;
+  dut->eval();
+#ifdef VCD_ENABLE
+  tfp->dump(vcd_times++);
+#endif
+}
+```
+同理可在`Emu`类里实现一个复位参数个周期的方法，只需要给外部接口`reset`赋值并调用`eval()`或`eval_step()`方法：
+
+```cpp
+void Emu::reset_n(uint64_t n) {
+  while (n--) {
+    dut->reset = 1;
+    dut->clock = 0;
+    dut->eval();
+#ifdef VCD_ENABLE
+    tfp->dump(vcd_times++);
+#endif
+    dut->clock = 1;
+    dut->eval();
+    dut->reset = 0;
+#ifdef VCD_ENABLE
+    tfp->dump(vcd_times++);
+#endif
+  }
+}
+```
+
+然后定义一个方法`Emu::execute()`用于不断周期推进直到自定义什么情况下结束仿真：
+> Emu类里定义了一个变量`state`用于定义`Emu`仿真的状态，该变量有两个值`enum { RUN, STOP };`用于表示是运行还是退出状态；仿真刚开始时将state初始化为`RUN`状态，定义`update_state()`方法用于在每一个周期刷新状态，其定义如下：
+
+```cpp
+void update_state() { if(state == RUN && dut->io_tick == 1) state = STOP; }
+```
+由定义可知如果顶层模块的接口`io_tick`输出信号为高，则将`state`置`STOP`状态，由前面所设计的模块可知，当计数器达到最大计数值值将在接口`io_tick`输出高店平信号（模拟值1）。
+
+定义`Emu::execute()`方法：
+> 该方法用`while() { ... }`循环去调用`update_state();`和`single_cycle();`方法，也就是每一次循环都更新`Emu`的状态和仿真一个周期，循环退出的条件判断为`!isFinish()`，其定义`bool isFinish() { return state == STOP; }`即`state`状态变量为`STOP`状态就停止仿真。
+```cpp
+void Emu::execute() {
+#ifdef VCD_ENABLE
+    Verilated::traceEverOn(true);	// Verilator must compute traced signals
+    VL_PRINTF("Enabling waves...\n");
+    tfp = new VerilatedVcdC;
+    dut->trace(tfp, 99);	// Trace 99 levels of hierarchy
+    tfp->open("build/emu_wave.vcd");	// Open the dump file
+#endif
+  // set state
+  state = RUN;
+  printf("\t simulation: start ...\t\n");
+  reset_n(2);
+  while (!isFinish()) {
+    // check emu state
+    update_state();
+    // run a cycle
+    single_cycle();
+  }
+#ifdef VCD_ENABLE
+  tfp->close();
+#endif
+  dut->final();
+  printf("\t simulation: end ...\t\n");
+}
+```
+
+至此，一个基本的仿真架构已经搭建好，然后再`main`函数里创建该`Emu`类，调用该类的`Emu::execute()`执行仿真即可：
+```cpp
+int main() {
+  auto emu = new Emu;
+  emu->execute();
+  return 0;
+}
+```
+
+该实验的目录结构
+```bash
+yangye@xiangshan-54:~/projects/counter$ tree
+.
+├── difftest
+│   ├── difftest.md
+│   └── image
+├── Makefile
+├── README.md
+└── src
+    ├── cpp
+    │   └── main.cpp
+    └── verilog
+        └── SimTop.v
+
+6 directories, 7 files
+```
+
+构建`Makefile`脚本来自动化编译生成，在该project目录下的`Makefile`里已经写好，为体现过程，实现了分步的目标
+
+第一步：在project目录下输入`Make verilator`, 执行verilator命令将verilog文件、cpp源文件作输入文件一起输出，其实际执行命令如下（见`Makefile`源文件）：
 ```bash
 verilator --cc --exe --top-module MyCounter -I/home54/yangye/projects/counter/build -Mdir /home54/yangye/projects/counter/build/verilator-out -o /home54/yangye/projects/counter/build/emu --trace src/verilog/MyCounter.v /home54/yangye/projects/counter/src/cpp/main.cpp
 ```
 
-上述参数 `-Mdir`指定了输出文件的位置，`-o`指定了最终可执行文件的位置，verilator支持 `c++`参数
-
+上述参数 `-Mdir`指定了输出文件的位置，`-o`指定了最终可执行文件的位置，`verilator`支持传入`c++`参数
+可在指定的路径下看到输出的所有文件
 ```bash
 yangye@xiangshan-54:~/projects/counter$ ll build/verilator-out/
-total 60
-drwxr-xr-x 2 yangye xs 4096 12月 20 19:27 ./
-drwxr-xr-x 3 yangye xs 4096 12月 20 19:27 ../
--rw-r--r-- 1 yangye xs 1671 12月 20 19:27 VMyCounter_classes.mk
--rw-r--r-- 1 yangye xs 4624 12月 20 19:27 VMyCounter.cpp
--rw-r--r-- 1 yangye xs 4165 12月 20 19:27 VMyCounter.h
--rw-r--r-- 1 yangye xs 1933 12月 20 19:27 VMyCounter.mk
--rw-r--r-- 1 yangye xs 2739 12月 20 19:27 VMyCounter__Slow.cpp
--rw-r--r-- 1 yangye xs  710 12月 20 19:27 VMyCounter__Syms.cpp
--rw-r--r-- 1 yangye xs 1007 12月 20 19:27 VMyCounter__Syms.h
--rw-r--r-- 1 yangye xs 1431 12月 20 19:27 VMyCounter__Trace.cpp
--rw-r--r-- 1 yangye xs 3090 12月 20 19:27 VMyCounter__Trace__Slow.cpp
--rw-r--r-- 1 yangye xs  799 12月 20 19:27 VMyCounter__ver.d
--rw-r--r-- 1 yangye xs 2126 12月 20 19:27 VMyCounter__verFiles.dat
+total 344
+drwxr-xr-x 2 yangye xs   4096 12月 24 11:58 ./
+drwxr-xr-x 3 yangye xs   4096 12月 24 11:58 ../
+-rw-r--r-- 1 yangye xs    404 12月 24 11:58 main.d
+-rw-r--r-- 1 yangye xs   6792 12月 24 11:58 main.o
+-rw-r--r-- 1 yangye xs    453 12月 24 11:58 verilated.d
+-rw-r--r-- 1 yangye xs 178904 12月 24 11:58 verilated.o
+-rw-r--r-- 1 yangye xs    479 12月 24 11:58 verilated_vcd_c.d
+-rw-r--r-- 1 yangye xs  55704 12月 24 11:58 verilated_vcd_c.o
+-rw-r--r-- 1 yangye xs  11904 12月 24 11:58 VSimTop__ALL.a
+-rw-r--r-- 1 yangye xs    239 12月 24 11:58 VSimTop__ALL.cpp
+-rw-r--r-- 1 yangye xs    496 12月 24 11:58 VSimTop__ALL.d
+-rw-r--r-- 1 yangye xs  10456 12月 24 11:58 VSimTop__ALL.o
+-rw-r--r-- 1 yangye xs   1653 12月 24 11:58 VSimTop_classes.mk
+-rw-r--r-- 1 yangye xs   4630 12月 24 11:58 VSimTop.cpp
+-rw-r--r-- 1 yangye xs   4130 12月 24 11:58 VSimTop.h
+-rw-r--r-- 1 yangye xs   1921 12月 24 11:58 VSimTop.mk
+-rw-r--r-- 1 yangye xs   2674 12月 24 11:58 VSimTop__Slow.cpp
+-rw-r--r-- 1 yangye xs    689 12月 24 11:58 VSimTop__Syms.cpp
+-rw-r--r-- 1 yangye xs    986 12月 24 11:58 VSimTop__Syms.h
+-rw-r--r-- 1 yangye xs   1503 12月 24 11:58 VSimTop__Trace.cpp
+-rw-r--r-- 1 yangye xs   3532 12月 24 11:58 VSimTop__Trace__Slow.cpp
+-rw-r--r-- 1 yangye xs    766 12月 24 11:58 VSimTop__ver.d
+-rw-r--r-- 1 yangye xs   2084 12月 24 11:58 VSimTop__verFiles.dat
 ```
 
-同样地去执行生成的 `Makefile`
+接下来需要执行生成的 `Makefile`脚本`VSimTop.mk`。
 
+输入`make emu`命令执行该生成的`Makefile`脚本`VSimTop.mk`。
+实际执行命令如下（见`Makefile`源文件）：
 ```bash
 make -C build/verilator-out -f VMyCounter.mk
 ```
 
-可以看到在指定路径下生成了可执行文件 `emu`
+可以看到在指定路径下生成了可执行文件 `emu`，
 
 ```bash
 yangye@xiangshan-54:~/projects/counter$ ll build/
 total 172
-drwxr-xr-x 3 yangye xs   4096 12月 20 19:33 ./
-drwxr-xr-x 4 yangye xs   4096 12月 20 19:27 ../
--rwxr-xr-x 1 yangye xs 160064 12月 20 19:33 emu*
-drwxr-xr-x 2 yangye xs   4096 12月 20 19:33 verilator-out/
+drwxr-xr-x 3 yangye xs   4096 12月 24 12:05 ./
+drwxr-xr-x 6 yangye xs   4096 12月 24 12:05 ../
+-rwxr-xr-x 1 yangye xs 160032 12月 24 12:05 emu*
+drwxr-xr-x 2 yangye xs   4096 12月 24 12:05 verilator-out/
 ```
 
-运行 `emu`
-
+运行 `emu`，输入`build/emu`或`make`或`make run`，即可看到在源码里定义的打印信息表示仿真的开始与结束。
 ```bash
-build/emu
+Enabling waves...
+         simulation: start ...
+         simulation: end ...
 ```
-
-可在源码或编译参数里定义展开生成波形文件的源代码，运行emu即可生成波形文件。
+可在源码或编译参数里定义展开生成波形文件的源代码，运行`emu`即可生成波形文件，这里方便阅读直接在源码里定义生成波形的宏定义将相关代码已经展开，因此运行`emu`后会在指定路径生成波形文件，如下：
 
 ```bash
 yangye@xiangshan-54:~/projects/counter$ ll build/
 total 176
-drwxr-xr-x 3 yangye xs   4096 12月 20 20:24 ./
-drwxr-xr-x 4 yangye xs   4096 12月 20 20:09 ../
--rwxr-xr-x 1 yangye xs 160184 12月 20 20:24 emu*
--rw-r--r-- 1 yangye xs    815 12月 20 20:24 emu_wave.vcd
-drwxr-xr-x 2 yangye xs   4096 12月 20 20:24 verilator-out/
+drwxr-xr-x 3 yangye xs   4096 12月 24 12:07 ./
+drwxr-xr-x 6 yangye xs   4096 12月 24 12:05 ../
+-rwxr-xr-x 1 yangye xs 160032 12月 24 12:05 emu*
+-rw-r--r-- 1 yangye xs   1086 12月 24 12:07 emu_wave.vcd
+drwxr-xr-x 2 yangye xs   4096 12月 24 12:05 verilator-out/
 ```
 
-查看波形
-
+打开该波形文件，可以看到波形对应了前面计数器的逻辑信号值：
 ![](image/difftest/emu_wave.png)
 
-至此，以一个简单的步骤实验了一下利用
-
-`verilator`开源工具把 `Verilog/SystemVerilog`封装为 `C++`文件的过程，并编写 `C++`源码，在该源码里创建 `verilator`封装的 `C++`类去仿真运行并打印波形文件。可以发现，verilator负责将封装成 `C++`类，提供接口赋值和方法以供仿真调用后，剩下的操作都交给了仿真程序的程序员，因此仿真程序可以根据程序员的定制功能具有很大的自由度，可根据不同的需求使用 `C++`或 `SystemC`定制不同的功能。`difftest`则是其仿真程序中开发的一种用于调试的功能。
+至此，以一个简单的步骤实验了一下利用`verilator`开源工具把 `Verilog/SystemVerilog`封装为 `C++`文件的过程，并编写 `C++`源码，在该源码里创建 `verilator`封装的 `C++`类去仿真运行并打印波形文件。可以发现，verilator负责将封装成 `C++`类，提供接口赋值和方法以供仿真调用后，剩下的操作都交给了仿真程序的程序员，因此仿真程序可以根据程序员的定制功能具有很大的自由度，可根据不同的需求使用 `C++`或 `SystemC`定制不同的功能。`difftest`则是其仿真程序中开发的一种用于调试的功能。
 
 可以观察到仿真执行的核心源代码：
 
@@ -482,8 +418,11 @@ while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
 
 ## 香山difftest源码
 
+`difftest`是将一个正在设计的模型（在这之后都称作`dut`）和一个正确实现的模型（在这之后称作`ref`）进行执行结果的对比。
+
 SMP difftest
 
+difftest源码目录结构
 ```bash
 yangye@xiangshan-54:~/xs-env/XiangShan/difftest$ tree -L 4
 .
@@ -543,8 +482,12 @@ typedef struct {
 } difftest_core_state_t;
 ```
 
-对于dut的执行，一次提交可能包含多条指令，为了保存较多的调试信息，声明了一个DiffState类，该类成员用于保存最近历史提交的一些相关信息。
+对于`dut`的执行，一次提交可能包含多条指令，为了保存较多的调试信息，声明了一个`DiffState`类，该类用于`dut`提交指令信息后将重要的信息保存下来。
+可以看到该类用数组实现了一些队列，并提供相应的方法将信息（`PC、inst、wen、wdst、wdata`等等）记录到队列并且入队指针+1。 
 
+> `record_group`: 记录最近历史进行对比的提交指令相关信息  
+`record_inst`: 记录`dut`提交的指令相关信息  
+`record_abnormal_inst`: 记录因中断/异常而取消的指令  
 ```cpp
 // difftest/src/test/csrc/difftest/difftest.h: 197
 class DiffState {
@@ -852,18 +795,96 @@ int difftest_step() {
   return 0;
 }
 ```
+#### difftest step: 执行结果对比
 
-接下来看对于一个单核心core的 `Difftest`类的 `step()`方法
+接下来看对于一个单核心core的 `Difftest`类的 `step()`方法，该方法定义在`difftest/src/test/csrc/difftest/difftest.cpp: 88`，分析该函数如何实现`difftest`的指令对比:
+
+
 首先定义一个标识符 `progress`，该标识表示是否进行此次 `difftest`的对比，当该值为 `true`进行结果对比，`false`跳过对比。
-
+将`ticks`变量自增1，用于超时检查
 ```cpp
-progress = false;
+int Difftest::step() {
+  progress = false;
+  ticks++;
 ```
 
+
+```cpp
+#ifdef BASIC_DIFFTEST_ONLY
+  proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
+  dut.csr.this_pc = ref.csr.this_pc;
+#else
+  // TODO: update nemu/xs to fix this_pc comparison
+  dut.csr.this_pc = dut.commit[0].pc;
+#endif
+```
+检查是否超时未提交指令，首次提交指令特别处理函数`do_first_instr_commit()`，这里暂时不讨论
+```cpp
+  if (check_timeout()) {
+    return 1;
+  }
+  do_first_instr_commit();
+```
+检查store指令的提交，以函数`do_store_check()`封装该行为，在后面讨论`do_store_check()`具体的实现
+```cpp
+  if (do_store_check()) {
+    return 1;
+  }
+```
+
+> 注意在这里`dut`的`store`指令已经提交(`ref`已经执行该`store`指令)准备写入`store buffer`(可在`Xiangshan`的`StoreQueue.scala: 572` )看到`StoreEvent`的`Difftest`提交接口逻辑：
+```scala
+val difftest = Module(new DifftestStoreEvent)
+      difftest.io.clock       := clock
+      difftest.io.coreid      := io.hartId
+      difftest.io.index       := i.U
+      difftest.io.valid       := storeCommit
+      difftest.io.storeAddr   := waddr
+      difftest.io.storeData   := wdata
+      difftest.io.storeMask   := wmask
+```
+
+`do_store_check()`函数具体实现如下，通过将`dut`的`store`指令的提交信息赋给`ref`的接口的`store_commit`参数，该接口将`dut`提交的`store`指令的`addr、data、mask`与`NEMU`模拟器`ref`进行对比（`NEMU`里维护了一个`commit store`队列）。
+```cpp
+// difftest.cpp: 325
+int Difftest::do_store_check() {
+  ......
+    if (proxy->store_commit(&addr, &data, &mask)) {
+      ......
+      return 1;
+    }
+    ......
+}
+```
+
+接下来，由宏定义是否展开，执行`do_golden_memory_update()`函数，`emu`维持了一个第三方的内存区域`pmem`。由于写回策略的影响，某一刻下dut的内存模拟ram可能不是地址对应的最新数据。这个第三方的内存区域用来刷新所有的写操作，是该内存区域的数据是当前运行时刻最新的数据。
+```cpp
+#ifdef DEBUG_GOLDENMEM
+  if (do_golden_memory_update()) {
+    return 1;
+  }
+#endif
+```
+这里检查dut是否有过提交，若还没有提交过指令，则difftest到这里就返回0，让emu继续执行下一个周期
+```cpp
+  if (!has_commit) {
+    return 0;
+  }
+```
+`MissQueue`重填信号检查，由dut在MissQueue里refill block data时检查refill的addr对应的block data与上诉所说的第三方的pmem（保持最新数据的内存）是否一致（可做一致性）
+```cpp
+#ifdef DEBUG_REFILL
+  if (do_refill_check()) {
+    return 1;
+  }
+#endif
+```
 根据dut状态里检查是否触发了中断，若带有中断的指令提交，执行 `do_interrupt()`函数，该函数会调用 `difftest`与 `ref`的接口函数使 `ref`触发一个参数指定中断号(该中断号来自 `dut`)的中断，
 
 ```cpp
-if (dut.event.interrupt) {
+  num_commit = 0; // reset num_commit this cycle to 0
+  // interrupt has the highest priority
+  if (dut.event.interrupt) {
     dut.csr.this_pc = dut.event.exceptionPC;
     do_interrupt();
   }
@@ -948,8 +969,7 @@ else {
 211   state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.com    mit[i].skip != 0);
 ```
 
-若lr/sc ?
-将SC的结果同步到模拟器, 仅允许成功 -> 失败的单向变动
+若`lr/sc` 将SC的结果同步到模拟器, 仅允许成功 -> 失败的单向变动
 ```cpp
 213   // sync lr/sc reg status
 214   if (dut.commit[i].scFailed) {
@@ -993,7 +1013,7 @@ else {
 242
 ```
 
-接下来的代码是针对于多核difftest的处理，放到后面章节解读。
+> `Difftest::do_instr_commit`接下来的代码是针对于多核difftest的处理，放到后面章节解读。
 
 回到`Difftest::step()`中往下继续执行，
 检查`progress`标志位，若为`true`则直接返回0，跳过本次`difftest`对比
@@ -1002,11 +1022,16 @@ else {
 if (!progress) {
   return 0;
 }
-
-使用ref的difftest接口读取 `NEMU`模拟器ref的处理器状态，将其保存到Difftest的成员ref内
+```
+> 使用ref的difftest接口读取 `NEMU`模拟器ref的处理器状态，将其保存到Difftest的成员ref内  
+根据提交的指令数目（变量`num_commit`），调用(`DiffState::record_group(...)`)方法将提交的指令记录入队。
 
 ```cpp
-proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
+  proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
+
+  if (num_commit > 0) {
+    state->record_group(dut.commit[0].pc, num_commit);
+  }
 ```
 
 交换 `PC`值，由于 `NEMU`模拟器的特性，执行一条指令后 `PC`值已经更新为下一条指令的地址，因此从 `NEMU`拷贝过来的处理器状态中的 `PC`值是指向下一条指令的，而dut处理器状态的PC值是当前指令的PC值，对比时有PC原理上不一致的问题。这里的操作时用nemu_this_pc变量保存上一次对比时的NEMU的PC值（指向当前指令），在当前指令对比时将nemu_this_pc更新到Difftest的成员ref中的PC，这样实现PC的同步，然后进行结果对比。
@@ -1018,7 +1043,7 @@ proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
   nemu_this_pc = nemu_next_pc;
 ```
 
-此时dut和ref的处理器状态都更新到Difftest的dut和ref成员里，dut_regs_ptr和ref_regs_ptr指向这两个数据结果，用库函数对比dut和ref的状态值，如果一致，memcmp返回0，该函数返回0；否则进入条件语句内，display()用于打印最近历史提交的指令信息，然后打印出对比结果不同的寄存器的相关信息；返回值1。
+此时`dut`和`ref`的处理器状态都更新到`Difftest`的`dut`和`ref`成员里，`dut_regs_ptr`和`ref_regs_ptr`指向这两个数据结果，用库函数对比`dut`和`ref`的状态值，如果一致，`memcmp`返回`0`，该函数返回`0`；否则进入条件语句内，`display()`用于打印最近历史提交的指令信息，然后打印出对比结果不同的寄存器的相关信息；返回值`1`。
 
 ```cpp
 if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
@@ -1040,7 +1065,7 @@ if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
 
 
 
-#### 多核Difftest
+#### 多核Difftest的处理
 
 
 处理多核 `difftest`环境下的 `load`，到这一步时，`dut`和 `ref`都执行了相同的 `load`指令（`mmio`的 `load`指令在上面已经 `return`），第 `247行`判断 `dut`是 `load`指令且写回寄存器但 `ref`写回的 `data`与 `dut`写回的 `data`不一致，此时在 `第271行`执行 `read_goldenmem(dut.load[i].paddr, &golden, len);`读取该load指令地址在ref中指向的内存（emu中ref的内存实现在 `goldenmem.cpp`中）上的数据值（ref指向的内存上的值不会存在写分配，内存上的值为地址的真实值），`第280行`判断load的地址的真实值是否等于dut提交的数据值，若相等，则调用ref接口 `regcpy`将该load的数据

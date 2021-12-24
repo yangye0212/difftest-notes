@@ -1,4 +1,4 @@
-TOP_NAME = MyCounter
+TOP_NAME = SimTop
 BUILD_DIR=$(shell pwd)/build
 
 cpp_dir = $(abspath ./src/cpp)
