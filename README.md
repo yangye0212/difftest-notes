@@ -1,6 +1,6 @@
 # difftest 注释
 
-对香山的`difftest`代码逻辑进行一方面的解读，文档在`difftest/difftest.md`
+对香山的`difftest`代码逻辑进行一方面的解读，文档在`docs/difftest.md`
 
 ## 文档结构
 

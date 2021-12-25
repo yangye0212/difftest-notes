@@ -593,7 +593,7 @@ public:
   void (*regcpy)(void *dut, bool direction);
   // 根据direction参数，将ref的控制状态寄存器CSR数据拷贝到第一个参数void *dut指向数据地址
   void (*csrcpy)(void *dut, bool direction);
-  // LR/SC
+  // LR/SC 的结果同步
   void (*uarchstatus_cpy)(void *dut, bool direction);
   // store指令提交对比，NEMU里用队列保存最近的store提交信息，dut提交store后会将其与NEMU提交的store进行写地址，写数据对比
   int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask);
@@ -857,7 +857,7 @@ int Difftest::do_store_check() {
 }
 ```
 
-接下来，由宏定义是否展开，执行`do_golden_memory_update()`函数，`emu`维持了一个第三方的内存区域`pmem`。由于写回策略的影响，某一刻下dut的内存模拟ram可能不是地址对应的最新数据。这个第三方的内存区域用来刷新所有的写操作，是该内存区域的数据是当前运行时刻最新的数据。
+接下来，由宏定义是否展开，执行`do_golden_memory_update()`函数，`emu`维持了一个第三方的内存区域`pmem`。由于写回策略的影响，某一刻下dut的内存模拟ram可能不是地址对应的最新数据。这个第三方的内存区域用来刷新所有的写操作，是该内存区域的数据是当前运行时刻最新的数据。它的作用在后续的多核心Difftest会有相关说明
 ```cpp
 #ifdef DEBUG_GOLDENMEM
   if (do_golden_memory_update()) {
@@ -1060,16 +1060,21 @@ if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
 ```
 
 
-
-
-
-
-
 #### 多核Difftest的处理
 
+多核心下的每一个dut会对应一个ref进行difftest验证。由前面所述可知，dut每一个核心在提交指令后进行相关检查、让ref执行同样的指令然后作结果对比。如果说每一个核心在不同的地址区间store那么difftest环境目前不会出现什么问题。但是由于一致性问题，dut中一个核load指令对应的数据可能会被其他核修改过，这会导致一个问题：ref并不知道这个load地址对应的数据被其他核修改了，此时若不加处理让ref执行同样的load指令则ref在它自己单独的内存上取出的数据一定和dut不一致。  
+> 如何处理这个情况呢？  
+前面说到emu里维护了一个名为`golden mem`的第三方内存区域用来维护一个最新的数据区域（由于dut的缓存非写通策略导致dut对应的内存区域emu中的ram在某时刻并不会保持运行时最新数据，需要维护一个保持运行时的最新数据的内存映射区域，这个区域应当是由dut来更新的——因为dut多核心缓存一致性的原因，可以在`difftest/src/test/csrc/difftest/goldenmem.cpp`查看相关源码，在上一节Difftest::step()的注释中可以看到`do_golden_memory_update()`根据每个核心dut.sbuffer的store指令来更新这个最新数据内存区域。
 
-处理多核 `difftest`环境下的 `load`，到这一步时，`dut`和 `ref`都执行了相同的 `load`指令（`mmio`的 `load`指令在上面已经 `return`），第 `247行`判断 `dut`是 `load`指令且写回寄存器但 `ref`写回的 `data`与 `dut`写回的 `data`不一致，此时在 `第271行`执行 `read_goldenmem(dut.load[i].paddr, &golden, len);`读取该load指令地址在ref中指向的内存（emu中ref的内存实现在 `goldenmem.cpp`中）上的数据值（ref指向的内存上的值不会存在写分配，内存上的值为地址的真实值），`第280行`判断load的地址的真实值是否等于dut提交的数据值，若相等，则调用ref接口 `regcpy`将该load的数据
+接下来具体看源码中怎么利用这个`golden mem`的第三方内存区域处理一致性带来的Difftest的问题
 
+在处理未携带中断/异常的指令处理函数`Difftest::do_instr_commit(int i)`中的末尾，会针对于多核 `difftest`环境下的 `load`指令进行检查：  
+到这一步时，`dut`和 `ref`都执行了相同的 `load`指令（`mmio`的 `load`指令在上面已经 `return`）  
+1. 判断dut和ref的load结果是否一致（不一致执行步骤2）： 第247行`if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != get_commit_data(i))`判断 `dut`是 `load`指令且但 `ref`加载的 `data`与 `dut`加载的 `data`不相等；也就是说这一步判断dut和ref执行同样的load后写回的结果是否不一致，若不一致则需要去判断是否是dut多核心的一致性带来的，若是数据的一致性导致ref执行load的结果不一样，我们需要将该正确的数据更新到ref的内存和寄存器转态中；  
+2. 读取正确的load值（存放在变量`golden`）然后执行步骤3：此时在 `第271行`执行 `read_goldenmem(dut.load[i].paddr, &golden, len);`读取该load指令地址在`golden mem`上的数据，该数据是多核心一致性下该地址addr的最新数据，也是正确的数据
+3. 判断dut load的结果与`golden`是否相等来执行ref的同步：第280行`if (golden == get_commit_data(i))`判断`golden mem`load addr的数据data是否等于dut的load提交的数据data。若相等，则调用ref接口 `proxy->memcpy`将该load的数据（也就是将由其他核心store操作更新的数据）拷贝到ref（NEMU）的内存中，完成了将dut由于多核心将需要保持一致性的数据也更新到ref中，此时将一致性的数据已经更新到ref的内存了，但是注意，ref执行的load指令的结果仍然是错误的，需要将正确的load之后的寄存器的值同步到ref，这里使用ref的接口`proxy->regcpy`来同步正确的寄存器状态（见282-285）；
+4. 判断是否为原子指令并做ref的同步：如果上诉条件不相等并且dut的load事件为atomic，重复步骤3的ref同步操作
+5. 若步骤3、4的条件都不成立则认为`SMP difftest mismatch!`,将ref中load的addr对应的数据拷贝出来打印输出以Debug；
 ```cpp
 243   // Handle load instruction carefully for SMP
 244   if (NUM_CORES > 1) {
