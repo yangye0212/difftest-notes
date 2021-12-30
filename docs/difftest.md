@@ -2,6 +2,10 @@
 
 ## difftest简介
 
+### 语雀
+
+[语雀文档](https://xiangshan.yuque.com/euzvvh/cv6gyu/kr97kx)
+
 ### difftest profile
 
 `difftest`，别名差分测试法。是当前“香山”处理器开发的一种验证方法。他是利用一个正确实现的
@@ -10,7 +14,7 @@
 
 ![](image/difftest/1639902812747.png)
 
-### 香山difftest的实现
+### 香山 `SMP Difftest`的实现
 
 利用 `verilator`将 `chisel`生成的 `verilog`代码编译封装成 `c++`文件，其中生成的 `c++`文件描述了所设计的微架构，并提供相应的方法模拟微架构的时钟推进来仿真微架构的运行(主要以 `c++`的类进行抽象)。
 
@@ -44,7 +48,7 @@ while(1) {
 
 ### 简单例子——计数器
 
-> 我们需要一个verilog文件来进行一个小实验，选择用chisel来生成一个模块。写一个简单的电路模块，比如用chisel写一个计数器，每个周期计数器加1，当达到最大值时向接口发出一个信号。使用一个顶层模块（这里名称使用`SimTop`与香山一致的名称，也可使用其他任意符合命令规范的名称或不使用）来例化该模块。代码如下：
+> 我们需要一个verilog文件来进行一个小实验，选择用chisel来生成一个模块。写一个简单的电路模块，比如用chisel写一个计数器，每个周期计数器加1，当达到最大值时向接口发出一个信号。使用一个顶层模块（这里名称使用 `SimTop`与香山一致的名称，也可使用其他任意符合命令规范的名称或不使用）来例化该模块。代码如下：
 
 #### chisel代码
 
@@ -86,15 +90,13 @@ object SimTop extends App {
 
 使用 `scala`构建工具 `mill`生成verilog，**此处命令不唯一**
 
-在上面指定的输出目录`"build/"`下能看到
+在上面指定的输出目录 `"build/"`下能看到
 
 ```bash
 SimTop.anno.json  SimTop.fir  SimTop.v
 ```
 
-其中的 `SimTop.v`为chisel最终生成的`verilog`文件，将这个`verilog`文件放入到当前project的src/verilog目录下：
-
-
+其中的 `SimTop.v`为chisel最终生成的 `verilog`文件，将这个 `verilog`文件放入到当前project的src/verilog目录下：
 
 #### verilator命令参数
 
@@ -125,6 +127,10 @@ Verilator 4.204 2021-06-12 rev v4.204
 `-I`：
 
 `-o`：指定生成的可执行文件(`.elf`)或静态库文件(`.a`)
+
+`-CFLAGS <flags>`：指定Makefile中 C++ 编译器参数
+
+`--savable`： Enable including save and restore functions in the generated model
 
 **调试参数**
 
@@ -158,9 +164,8 @@ drwxr-xr-x 7 yangye xs 4096 12月 24 10:55 ../
 -rw-r--r-- 1 yangye xs 1170 12月 24 10:55 VSimTop__verFiles.dat
 ```
 
-> 我们可以查看 `verilog`抽象封装成的 `C++`类，在 `VSimTop.h`声明，可以打开该文件，我们能看到封装的类和*顶层接口*以及定义的评估方法。该类里提供了两个方法：`eval()` or `eval_step()`。当这两个函数被调用时，Verilator查找时钟信号的变化并评估相关的顺序always块，例如计算 `always_ff @ (posedge…)`输出。然后Verilator评估组合逻辑。  
-> 通俗来说，`eval()` or `eval_step()`方法的调用，会根据外部输入值来更新内部所有的信号。利用这个方法的功能，我们可以实现一个周期的仿真：顶层模块一般都有`clock`接口，可以给予clock接口一个高电平信号，调用`eval()` or `eval_step()`评估内部所有信号值，再给予clock接口一个低电平信号，再调用`eval()` or `eval_step()`评估内部所有信号值，这样就可以实现所设计的模块内所有信号值在一个时钟周期的仿真。再给这个过程以循环的方式，就达到了周期不断推进的仿真过程。
-
+> 我们可以查看 `verilog`抽象封装成的 `C++`类，在 `VSimTop.h`声明，可以打开该文件，我们能看到封装的类和*顶层接口*以及定义的评估方法。该类里提供了两个方法：`eval()` or `eval_step()`。当这两个函数被调用时，Verilator查找时钟信号的变化并评估相关的顺序always块，例如计算 `always_ff @ (posedge…)`输出。然后Verilator评估组合逻辑。
+> 通俗来说，`eval()` or `eval_step()`方法的调用，会根据外部输入值来更新内部所有的信号。利用这个方法的功能，我们可以实现一个周期的仿真：顶层模块一般都有 `clock`接口，可以给予clock接口一个高电平信号，调用 `eval()` or `eval_step()`评估内部所有信号值，再给予clock接口一个低电平信号，再调用 `eval()` or `eval_step()`评估内部所有信号值，这样就可以实现所设计的模块内所有信号值在一个时钟周期的仿真。再给这个过程以循环的方式，就达到了周期不断推进的仿真过程。
 
 执行生成的 `makefile`文件（`VSimTop.mk`），会生成不同的二进制文件
 
@@ -189,27 +194,32 @@ drwxr-xr-x 7 yangye xs 4096 12月 24 10:55 ../
 -rw-r--r-- 1 yangye xs  266 12月 24 10:55 VSimTop__ver.d
 -rw-r--r-- 1 yangye xs 1170 12月 24 10:55 VSimTop__verFiles.dat
 ```
+
 如果说verilator生成的文件还需要用户自己写编译脚本将其加入到自己的仿真程序中这样不方便于用户的使用。
 为了快速地生成可执行文件，而不用让用户来手动添加这些文件到自己测试源文件中进行编译，
 
-> `verilator`在使用时将设计的 `Verilog/SystemVerilog`文件和编写仿真的源文件一起作为`verilator`的输入文件，编译后生成相应的`Makefile`文件会有相应的过程将封装出来的（由`Verilog/SystemVerilog`转换）文件与用户编写的测试源文件一起编译链接成最后的可执行文件(`.elf`)或动态链接库文件(`.so`)，用户只需执行生成的 `Makefile`文件即可生成最终的可执行文件(`.elf`)。  
+> `verilator`在使用时将设计的 `Verilog/SystemVerilog`文件和编写仿真的源文件一起作为 `verilator`的输入文件，编译后生成相应的 `Makefile`文件会有相应的过程将封装出来的（由 `Verilog/SystemVerilog`转换）文件与用户编写的测试源文件一起编译链接成最后的可执行文件(`.elf`)或动态链接库文件(`.so`)，用户只需执行生成的 `Makefile`文件即可生成最终的可执行文件(`.elf`)。
 
-接下来实验一下相关过程：  
+接下来实验一下相关过程：
+
 #### 测试程序
-将仿真的源文件也作为`verilator`的输入文件（`cpp`源文件最好指定绝对路径，可编写`Makefile`来帮助我们快速构建执行过程）：
 
-首先编写自定义仿真程序，由上可知封装的文件的声明在头文件`VSimTop.h`(`Verilator`输出文件命名为`Verilog/SystemVerilog`的顶层模块的名称前面加大写`V`)，因此在我们的cpp文件里需要`#include <VSimTop.h>`(`src/cpp/main.cpp: 4`)，见源码`src/cpp/main.cpp`。  
-生成波形的相关代码由宏定义`VCD_ENABLE`来展开，该处直接在源文件中定义，`verilator`命令可以添加编译参数，也可在编译参数中来指定该宏定义。  
-构建一个名为Emu的类来将仿真的过程抽象，定义成员变量`VSimTop *dut;`，该变量指向所设计的`verilog`模块经`verilator`封装后的`C++`类，在构造函数中初始化：
+将仿真的源文件也作为 `verilator`的输入文件（`cpp`源文件最好指定绝对路径，可编写 `Makefile`来帮助我们快速构建执行过程）：
+
+首先编写自定义仿真程序，由上可知封装的文件的声明在头文件 `VSimTop.h`(`Verilator`输出文件命名为 `Verilog/SystemVerilog`的顶层模块的名称前面加大写 `V`)，因此在我们的cpp文件里需要 `#include <VSimTop.h>`(`src/cpp/main.cpp: 4`)，见源码 `src/cpp/main.cpp`。
+生成波形的相关代码由宏定义 `VCD_ENABLE`来展开，该处直接在源文件中定义，`verilator`命令可以添加编译参数，也可在编译参数中来指定该宏定义。
+构建一个名为Emu的类来将仿真的过程抽象，定义成员变量 `VSimTop *dut;`，该变量指向所设计的 `verilog`模块经 `verilator`封装后的 `C++`类，在构造函数中初始化：
+
 ```cpp
 Emu::Emu(/* args */): dut(new VSimTop) {
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
   vcd_times = 0;
 #endif
 }
 ```
 
-定义方法`Emu::single_cycle()`实现周期推进，在上面已经了解了封装后的类提供`eval()`或`eval_step()`方法，因此可以通过给`clock`接口交替赋值交替调用`eval()`或`eval_step()`方法来实现一个周期的推进(宏`VCD_ENABLE`为波形生成的相关代码暂时不管)：
+定义方法 `Emu::single_cycle()`实现周期推进，在上面已经了解了封装后的类提供 `eval()`或 `eval_step()`方法，因此可以通过给 `clock`接口交替赋值交替调用 `eval()`或 `eval_step()`方法来实现一个周期的推进(宏 `VCD_ENABLE`为波形生成的相关代码暂时不管)：
+
 ```cpp
 void Emu::single_cycle() {
   dut->clock = 0;
@@ -224,7 +234,8 @@ void Emu::single_cycle() {
 #endif
 }
 ```
-同理可在`Emu`类里实现一个复位参数个周期的方法，只需要给外部接口`reset`赋值并调用`eval()`或`eval_step()`方法：
+
+同理可在 `Emu`类里实现一个复位参数个周期的方法，只需要给外部接口 `reset`赋值并调用 `eval()`或 `eval_step()`方法：
 
 ```cpp
 void Emu::reset_n(uint64_t n) {
@@ -245,16 +256,20 @@ void Emu::reset_n(uint64_t n) {
 }
 ```
 
-然后定义一个方法`Emu::execute()`用于不断周期推进直到自定义什么情况下结束仿真：
-> Emu类里定义了一个变量`state`用于定义`Emu`仿真的状态，该变量有两个值`enum { RUN, STOP };`用于表示是运行还是退出状态；仿真刚开始时将state初始化为`RUN`状态，定义`update_state()`方法用于在每一个周期刷新状态，其定义如下：
+然后定义一个方法 `Emu::execute()`用于不断周期推进直到自定义什么情况下结束仿真：
+
+> Emu类里定义了一个变量 `state`用于定义 `Emu`仿真的状态，该变量有两个值 `enum { RUN, STOP };`用于表示是运行还是退出状态；仿真刚开始时将state初始化为 `RUN`状态，定义 `update_state()`方法用于在每一个周期刷新状态，其定义如下：
 
 ```cpp
 void update_state() { if(state == RUN && dut->io_tick == 1) state = STOP; }
 ```
-由定义可知如果顶层模块的接口`io_tick`输出信号为高，则将`state`置`STOP`状态，由前面所设计的模块可知，当计数器达到最大计数值值将在接口`io_tick`输出高店平信号（模拟值1）。
 
-定义`Emu::execute()`方法：
-> 该方法用`while() { ... }`循环去调用`update_state();`和`single_cycle();`方法，也就是每一次循环都更新`Emu`的状态和仿真一个周期，循环退出的条件判断为`!isFinish()`，其定义`bool isFinish() { return state == STOP; }`即`state`状态变量为`STOP`状态就停止仿真。
+由定义可知如果顶层模块的接口 `io_tick`输出信号为高，则将 `state`置 `STOP`状态，由前面所设计的模块可知，当计数器达到最大计数值值将在接口 `io_tick`输出高店平信号（模拟值1）。
+
+定义 `Emu::execute()`方法：
+
+> 该方法用 `while() { ... }`循环去调用 `update_state();`和 `single_cycle();`方法，也就是每一次循环都更新 `Emu`的状态和仿真一个周期，循环退出的条件判断为 `!isFinish()`，其定义 `bool isFinish() { return state == STOP; }`即 `state`状态变量为 `STOP`状态就停止仿真。
+
 ```cpp
 void Emu::execute() {
 #ifdef VCD_ENABLE
@@ -282,7 +297,8 @@ void Emu::execute() {
 }
 ```
 
-至此，一个基本的仿真架构已经搭建好，然后再`main`函数里创建该`Emu`类，调用该类的`Emu::execute()`执行仿真即可：
+至此，一个基本的仿真架构已经搭建好，然后再 `main`函数里创建该 `Emu`类，调用该类的 `Emu::execute()`执行仿真即可：
+
 ```cpp
 int main() {
   auto emu = new Emu;
@@ -292,6 +308,7 @@ int main() {
 ```
 
 该实验的目录结构
+
 ```bash
 yangye@xiangshan-54:~/projects/counter$ tree
 .
@@ -309,15 +326,19 @@ yangye@xiangshan-54:~/projects/counter$ tree
 6 directories, 7 files
 ```
 
-构建`Makefile`脚本来自动化编译生成，在该project目录下的`Makefile`里已经写好，为体现过程，实现了分步的目标
+构建 `Makefile`脚本来自动化编译生成，在该project目录下的 `Makefile`里已经写好，为体现过程，实现了分步的目标
 
-第一步：在project目录下输入`Make verilator`, 执行verilator命令将verilog文件、cpp源文件作输入文件一起输出，其实际执行命令如下（见`Makefile`源文件）：
+第一步：在project目录下输入 `make verilator`, 执行verilator命令将verilog文件、cpp源文件作输入文件一起输出，其实际执行命令如下（见 `Makefile`源文件）：
+
 ```bash
 verilator --cc --exe --top-module MyCounter -I/home54/yangye/projects/counter/build -Mdir /home54/yangye/projects/counter/build/verilator-out -o /home54/yangye/projects/counter/build/emu --trace src/verilog/MyCounter.v /home54/yangye/projects/counter/src/cpp/main.cpp
 ```
 
-上述参数 `-Mdir`指定了输出文件的位置，`-o`指定了最终可执行文件的位置，`verilator`支持传入`c++`参数
+上述参数 `-Mdir`指定了输出文件的位置，`-o`指定了最终可执行文件的位置，`verilator`支持传入 `c++`参数
 可在指定的路径下看到输出的所有文件
+
+[verilator输出文件类型](https://verilator.org/guide/latest/files.html#files-read-written)
+
 ```bash
 yangye@xiangshan-54:~/projects/counter$ ll build/verilator-out/
 total 344
@@ -346,10 +367,11 @@ drwxr-xr-x 3 yangye xs   4096 12月 24 11:58 ../
 -rw-r--r-- 1 yangye xs   2084 12月 24 11:58 VSimTop__verFiles.dat
 ```
 
-接下来需要执行生成的 `Makefile`脚本`VSimTop.mk`。
+接下来需要执行生成的 `Makefile`脚本 `VSimTop.mk`。
 
-输入`make emu`命令执行该生成的`Makefile`脚本`VSimTop.mk`。
-实际执行命令如下（见`Makefile`源文件）：
+输入 `make emu`命令执行该生成的 `Makefile`脚本 `VSimTop.mk`。
+实际执行命令如下（见 `Makefile`源文件）：
+
 ```bash
 make -C build/verilator-out -f VMyCounter.mk
 ```
@@ -365,13 +387,15 @@ drwxr-xr-x 6 yangye xs   4096 12月 24 12:05 ../
 drwxr-xr-x 2 yangye xs   4096 12月 24 12:05 verilator-out/
 ```
 
-运行 `emu`，输入`build/emu`或`make`或`make run`，即可看到在源码里定义的打印信息表示仿真的开始与结束。
+运行 `emu`，输入 `build/emu`或 `make`或 `make run`，即可看到在源码里定义的打印信息表示仿真的开始与结束。
+
 ```bash
 Enabling waves...
          simulation: start ...
          simulation: end ...
 ```
-可在源码或编译参数里定义展开生成波形文件的源代码，运行`emu`即可生成波形文件，这里方便阅读直接在源码里定义生成波形的宏定义将相关代码已经展开，因此运行`emu`后会在指定路径生成波形文件，如下：
+
+可在源码或编译参数里定义展开生成波形文件的源代码，运行 `emu`即可生成波形文件，这里方便阅读直接在源码里定义生成波形的宏定义将相关代码已经展开，因此运行 `emu`后会在指定路径生成波形文件，如下：
 
 ```bash
 yangye@xiangshan-54:~/projects/counter$ ll build/
@@ -386,7 +410,7 @@ drwxr-xr-x 2 yangye xs   4096 12月 24 12:05 verilator-out/
 打开该波形文件，可以看到波形对应了前面计数器的逻辑信号值：
 ![](image/difftest/emu_wave.png)
 
-至此，以一个简单的步骤实验了一下利用`verilator`开源工具把 `Verilog/SystemVerilog`封装为 `C++`文件的过程，并编写 `C++`源码，在该源码里创建 `verilator`封装的 `C++`类去仿真运行并打印波形文件。可以发现，verilator负责将封装成 `C++`类，提供接口赋值和方法以供仿真调用后，剩下的操作都交给了仿真程序的程序员，因此仿真程序可以根据程序员的定制功能具有很大的自由度，可根据不同的需求使用 `C++`或 `SystemC`定制不同的功能。`difftest`则是其仿真程序中开发的一种用于调试的功能。
+至此，以一个简单的步骤实验了一下利用 `verilator`开源工具把 `Verilog/SystemVerilog`封装为 `C++`文件的过程，并编写 `C++`源码，在该源码里创建 `verilator`封装的 `C++`类去仿真运行并打印波形文件。可以发现，verilator负责将封装成 `C++`类，提供接口赋值和方法以供仿真调用后，剩下的操作都交给了仿真程序的程序员，因此仿真程序可以根据程序员的定制功能具有很大的自由度，可根据不同的需求使用 `C++`或 `SystemC`定制不同的功能。`difftest`则是其仿真程序中开发的一种用于调试的功能。
 
 可以观察到仿真执行的核心源代码：
 
@@ -418,11 +442,14 @@ while (!Verilated::gotFinish() && trapCode == STATE_RUNNING) {
 
 ## 香山difftest源码
 
-`difftest`是将一个正在设计的模型（在这之后都称作`dut`）和一个正确实现的模型（在这之后称作`ref`）进行执行结果的对比。
+`difftest`是将一个正在设计的模型（在这之后都称作 `dut`）和一个正确实现的模型（在这之后称作 `ref`）进行执行结果的对比。
 
-SMP difftest
+### SMP difftest
+
+![](image/difftest/dut_ref.png)
 
 difftest源码目录结构
+
 ```bash
 yangye@xiangshan-54:~/xs-env/XiangShan/difftest$ tree -L 4
 .
@@ -482,12 +509,13 @@ typedef struct {
 } difftest_core_state_t;
 ```
 
-对于`dut`的执行，一次提交可能包含多条指令，为了保存较多的调试信息，声明了一个`DiffState`类，该类用于`dut`提交指令信息后将重要的信息保存下来。
-可以看到该类用数组实现了一些队列，并提供相应的方法将信息（`PC、inst、wen、wdst、wdata`等等）记录到队列并且入队指针+1。 
+对于 `dut`的执行，一次提交可能包含多条指令，为了保存较多的调试信息，声明了一个 `DiffState`类，该类用于 `dut`提交指令信息后将重要的信息保存下来。
+可以看到该类用数组实现了一些队列，并提供相应的方法将信息（`PC、inst、wen、wdst、wdata`等等）记录到队列并且入队指针+1。
 
-> `record_group`: 记录最近历史进行对比的提交指令相关信息  
-`record_inst`: 记录`dut`提交的指令相关信息  
-`record_abnormal_inst`: 记录因中断/异常而取消的指令  
+> `record_group`: 记录最近历史进行对比的提交指令相关信息
+> `record_inst`: 记录 `dut`提交的指令相关信息
+> `record_abnormal_inst`: 记录因中断/异常而取消的指令
+
 ```cpp
 // difftest/src/test/csrc/difftest/difftest.h: 197
 class DiffState {
@@ -545,7 +573,7 @@ Difftest::Difftest(int coreid) : id(coreid) {
 }
 ```
 
-#### dut 接口
+### dut 接口
 
 ```
 需要做处理器的状态对比，首先需要获取dut的状态，香山利用DPI-C接口获取dut的状态。
@@ -574,49 +602,69 @@ Difftest::Difftest(int coreid) : id(coreid) {
 
 因此实现difftest时，在选取的已经正确实现的模拟器作ref时，需要实现上述的接口，下一节来看ref接口的实现。
 
-#### NEMU
+`difftest/src/test/csrc/difftest/refproxy.h`
+
+#### ref 基类
+
+首先是定义的ref的基类，该类里定义了基本的ref接口函数指针的成员变量：
+
+```cpp
+class RefProxy {
+public:
+  // public callable functions
+  void (*memcpy)(paddr_t nemu_addr, void *dut_buf, size_t n, bool direction) = NULL;
+  void (*regcpy)(void *dut, bool direction) = NULL;
+  void (*csrcpy)(void *dut, bool direction) = NULL;
+  void (*uarchstatus_cpy)(void *dut, bool direction) = NULL;
+  int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask) = NULL;
+  void (*exec)(uint64_t n) = NULL;
+  vaddr_t (*guided_exec)(void *disambiguate_para) = NULL;
+  vaddr_t (*update_config)(void *config) = NULL;
+  void (*raise_intr)(uint64_t no) = NULL;
+  void (*isa_reg_display)() = NULL;
+  void (*query)(void *result_buffer, uint64_t type) = NULL;
+  void (*debug_mem_sync)(paddr_t addr, void *bytes, size_t size) = NULL;
+};
+```
+
+#### NEMU ref 封装类
 
 `NEMU`是国科大设计的一种高速模拟器，
 
-`NEMU`的交互接口定义在 `difftest/src/test/csrc/difftest`目录下的和 `nemuproxy.h`里，封装为 `C++`类 `NemuProxy`。
-
-其实现在 `nemuproxy.cpp`。
+`NEMU`的交互接口定义在 `difftest/src/test/csrc/difftest`目录下的和 `refproxy.h`里，继承自基类 `RefProxy`。
 
 ```cpp
-// nemuproxy.h
-class NemuProxy {
+#define NEMU_ENV_VARIABLE "NEMU_HOME"
+#define NEMU_SO_FILENAME  "build/riscv64-nemu-interpreter-so"
+class NemuProxy : public RefProxy {
 public:
-  // public callable functions
-  // 根据direction参数，将dut的内存数据拷贝到ref或者将ref的内存数据拷贝到dut
-  void (*memcpy)(paddr_t nemu_addr, void *dut_buf, size_t n, bool direction);
-  // 根据direction参数，将ref的通用寄存器数据拷贝到第一个参数void *dut指向数据地址
-  void (*regcpy)(void *dut, bool direction);
-  // 根据direction参数，将ref的控制状态寄存器CSR数据拷贝到第一个参数void *dut指向数据地址
-  void (*csrcpy)(void *dut, bool direction);
-  // LR/SC 的结果同步
-  void (*uarchstatus_cpy)(void *dut, bool direction);
-  // store指令提交对比，NEMU里用队列保存最近的store提交信息，dut提交store后会将其与NEMU提交的store进行写地址，写数据对比
-  int (*store_commit)(uint64_t *saddr, uint64_t *sdata, uint8_t *smask);
-  // 让ref提交参数n指定数目的指令
-  void (*exec)(uint64_t n);
-  // 
-  vaddr_t (*guided_exec)(void *disambiguate_para);
-  vaddr_t (*update_config)(void *config);
-  // 让ref触发一个由参数uint64_t no指定中断号的中断
-  void (*raise_intr)(uint64_t no);
-  // 打印ref的寄存器状态
-  void (*isa_reg_display)();
-  void (*query)(void *result_buffer, uint64_t type);
-  // 构造函数，参数为核心ID，针对多核Difftest的ref
   NemuProxy(int coreid);
 private:
 };
 ```
 
-类的成员大多为函数指针，用于指向与 `NEMU`交互的接口函数，在构造函数中初始化，其中的全局变量 `difftest_ref_so`是 `NEMU`模拟器编译成动态链接库文件的绝对路径，：
+#### Spike ref 封装类
+
+Spike是RISC-V的一种仿真器，它可以仿真一个或多个hart，支持SMP difftest
+
+[OpenXiangshan/riscv-isa-sim](https://github.com/OpenXiangShan/riscv-isa-sim.git)
 
 ```cpp
-// nemuproxy.cpp: 32 构造函数
+#define SPIKE_ENV_VARIABLE "SPIKE_HOME"
+#define SPIKE_SO_FILENAME  "difftest/build/riscv64-spike-so"
+class SpikeProxy : public RefProxy {
+public:
+  SpikeProxy(int coreid);
+private:
+};
+```
+
+其实现在 `nemuproxy.cpp`。
+
+ref的接口在其各自封装的类的构造函数中初始化，其中的全局变量 `difftest_ref_so`是ref(`NEMU`/`Spike`)模拟器编译成动态链接库文件的绝对路径
+
+```cpp
+// refproxy.cpp
 NemuProxy::NemuProxy(int coreid) {
   if (difftest_ref_so == NULL) {
     ......
@@ -625,12 +673,33 @@ NemuProxy::NemuProxy(int coreid) {
 }
 ```
 
-来看接口函数的初始化，以实现拷贝程序指令的接口为例如下：
+#### ref接口初始化——加载动态链接库（以NEMU为例）
+
+定位到 `refproxy.cpp: NemuProxy`的构造函数 `NemuProxy::NemuProxy(int coreid)`
+
+这里使用 `linux`提供的库函数 `dlmopen`加载 `difftest_ref_so`指定的动态连接库文件(若未指定 `difftest_ref_so` 变量则使用默认路径），这里使用linux库函数 `dlmopen()`加载参数指定路径（NEMU编译）的动态链接库文件，将其映射到emu进程的地址空间中。该函数的返回值是被加载的模块的句柄。
+
+```cpp
+void *dlmopen (Lmid_t lmid, const char *filename, int flags);
+```
 
 ```cpp
 // nemuproxy.cpp: 50
 void *handle = dlmopen(LM_ID_NEWLM, difftest_ref_so, RTLD_LAZY | RTLD_DEEPBIND);
 ```
+
+思考：此步为什么不用 `dlopen()`函数而用 `dlmopen()`函数？两者有什么区别？
+
+> 被 `dlopen()`函数加载过后的模块，再次加载返回的是同一句柄，而在 `SMP difftest`下，dut的每一个cpu核心应当对应一个ref(NEMU)这样的参考模型。
+> `dlmopen()`与 `dlopen()`的主要不同之处主要在于它接受另一个参数 `lmid`，它指定应该被加载的共享对象的链接映射列表（也称为命名空间）。而 `lmid` 参数值 `LM_ID_NEWLM`创建新的命名空间并在该命名空间中加载共享对象。相当于创建新的副本。
+
+[dlopen/dlmopen参考](https://www.onitroad.com/jc/linux/man-pages/linux/man3/dlmopen.3.html)
+
+来看接口函数的初始化，以实现内存拷贝程序指令的接口为例如下：
+
+`dlsym()`函数：
+
+`dlsym`函数在第一个参数指向的句柄里（即上述 `dlmopen()`返回的句柄）加载第二个参数指定的符号名称。如果查找的符号是函数，则返回函数的地址；如果是变量，则返回变量的地址；如果这个符号是个常量，则返回的是常量的值。因此会在 `NEMU`源码经编译后的符号表里找到并返回在 `NEMU`实现的 `difftest`函数接口 `"difftest_memcpy"`，
 
 ```cpp
 // nemuproxy.cpp: 56  
@@ -638,7 +707,7 @@ this->memcpy = (void (*)(paddr_t, void *, size_t, bool))dlsym(handle, "difftest_
 check_and_assert(this->memcpy);
 ```
 
-这里使用 `linux`提供的库函数 `dlmopen`加载 `difftest_ref_so`指定的动态连接库文件获取句柄， `dlsym`方法在加载的动态库里寻找符号值，会在 `NEMU`源码经编译后的符号表里找到并返回在 `NEMU`实现的 `difftest`函数接口 `"difftest_memcpy"`，在 `NEMU`源码 `/src/cpu/difftest/ref.c`可以找到该接口的定义，并且 `NEMU`作 `ref`的接口都定义在该文件内：
+在 `NEMU`源码 `/src/cpu/difftest/ref.c`可以找到该接口的定义，并且 `NEMU` 作为 `ref`的接口都定义在该文件内（需要在 `verilator`命令中指定链接参数 `-LDFLAGS <flags>, 指明-ldl选项`）：
 
 ```cpp
 // $(NEMU_HOME)/src/cpu/difftest/ref.c:31:
@@ -673,14 +742,13 @@ void difftest_memcpy(paddr_t nemu_addr, void *dut_buf, size_t n, bool direction)
 检查是否有中断或例外, 有的话进行处理
 检查正常指令的执行结果
 
-
 从dut的周期推进代码出发：
 
 ```cpp
 // difftest/src/test/csrc/verilator/emu.cpp: 351
 ```
 
-首先是嵌入的checkpoint检查，这里暂时不注解
+首先是嵌入的checkpoint检查，这里暂时不注解，在LightSSS文档（`src/LightSSS.md`）注解
 
 ```cpp
 if (is_fork_child() && cycles != 0 && cycles == lightsss.get_end_cycles()) {
@@ -795,19 +863,19 @@ int difftest_step() {
   return 0;
 }
 ```
+
 #### difftest step: 执行结果对比
 
-接下来看对于一个单核心core的 `Difftest`类的 `step()`方法，该方法定义在`difftest/src/test/csrc/difftest/difftest.cpp: 88`，分析该函数如何实现`difftest`的指令对比:
-
+接下来看对于一个单核心core的 `Difftest`类的 `step()`方法，该方法定义在 `difftest/src/test/csrc/difftest/difftest.cpp: 88`，分析该函数如何实现 `difftest`的指令对比:
 
 首先定义一个标识符 `progress`，该标识表示是否进行此次 `difftest`的对比，当该值为 `true`进行结果对比，`false`跳过对比。
-将`ticks`变量自增1，用于超时检查
+将 `ticks`变量自增1，用于超时检查
+
 ```cpp
 int Difftest::step() {
   progress = false;
   ticks++;
 ```
-
 
 ```cpp
 #ifdef BASIC_DIFFTEST_ONLY
@@ -818,21 +886,26 @@ int Difftest::step() {
   dut.csr.this_pc = dut.commit[0].pc;
 #endif
 ```
-检查是否超时未提交指令，首次提交指令特别处理函数`do_first_instr_commit()`，这里暂时不讨论
+
+检查是否超时未提交指令，首次提交指令特别处理函数 `do_first_instr_commit()`，这里暂时不讨论
+
 ```cpp
   if (check_timeout()) {
     return 1;
   }
   do_first_instr_commit();
 ```
-检查store指令的提交，以函数`do_store_check()`封装该行为，在后面讨论`do_store_check()`具体的实现
+
+检查store指令的提交，以函数 `do_store_check()`封装该行为，在后面讨论 `do_store_check()`具体的实现
+
 ```cpp
   if (do_store_check()) {
     return 1;
   }
 ```
 
-> 注意在这里`dut`的`store`指令已经提交(`ref`已经执行该`store`指令)准备写入`store buffer`(可在`Xiangshan`的`StoreQueue.scala: 572` )看到`StoreEvent`的`Difftest`提交接口逻辑：
+> 注意在这里 `dut`的 `store`指令已经提交(`ref`已经执行该 `store`指令)准备写入 `store buffer`(可在 `Xiangshan`的 `StoreQueue.scala: 572` )看到 `StoreEvent`的 `Difftest`提交接口逻辑：
+
 ```scala
 val difftest = Module(new DifftestStoreEvent)
       difftest.io.clock       := clock
@@ -844,7 +917,8 @@ val difftest = Module(new DifftestStoreEvent)
       difftest.io.storeMask   := wmask
 ```
 
-`do_store_check()`函数具体实现如下，通过将`dut`的`store`指令的提交信息赋给`ref`的接口的`store_commit`参数，该接口将`dut`提交的`store`指令的`addr、data、mask`与`NEMU`模拟器`ref`进行对比（`NEMU`里维护了一个`commit store`队列）。
+`do_store_check()`函数具体实现如下，通过将 `dut`的 `store`指令的提交信息赋给 `ref`的接口的 `store_commit`参数，该接口将 `dut`提交的 `store`指令的 `addr、data、mask`与 `NEMU`模拟器 `ref`进行对比（`NEMU`里维护了一个 `commit store`队列）。
+
 ```cpp
 // difftest.cpp: 325
 int Difftest::do_store_check() {
@@ -857,7 +931,8 @@ int Difftest::do_store_check() {
 }
 ```
 
-接下来，由宏定义是否展开，执行`do_golden_memory_update()`函数，`emu`维持了一个第三方的内存区域`pmem`。由于写回策略的影响，某一刻下dut的内存模拟ram可能不是地址对应的最新数据。这个第三方的内存区域用来刷新所有的写操作，是该内存区域的数据是当前运行时刻最新的数据。它的作用在后续的多核心Difftest会有相关说明
+接下来，由宏定义是否展开，执行 `do_golden_memory_update()`函数，`emu`维持了一个第三方的内存区域 `pmem`。由于写回策略的影响，某一刻下dut的内存模拟ram可能不是地址对应的最新数据。这个第三方的内存区域用来刷新所有的写操作，是该内存区域的数据是当前运行时刻最新的数据。它的作用在后续的多核心Difftest会有相关说明
+
 ```cpp
 #ifdef DEBUG_GOLDENMEM
   if (do_golden_memory_update()) {
@@ -865,13 +940,17 @@ int Difftest::do_store_check() {
   }
 #endif
 ```
+
 这里检查dut是否有过提交，若还没有提交过指令，则difftest到这里就返回0，让emu继续执行下一个周期
+
 ```cpp
   if (!has_commit) {
     return 0;
   }
 ```
+
 `MissQueue`重填信号检查，由dut在MissQueue里refill block data时检查refill的addr对应的block data与上诉所说的第三方的pmem（保持最新数据的内存）是否一致（可做一致性）
+
 ```cpp
 #ifdef DEBUG_REFILL
   if (do_refill_check()) {
@@ -879,6 +958,7 @@ int Difftest::do_store_check() {
   }
 #endif
 ```
+
 根据dut状态里检查是否触发了中断，若带有中断的指令提交，执行 `do_interrupt()`函数，该函数会调用 `difftest`与 `ref`的接口函数使 `ref`触发一个参数指定中断号(该中断号来自 `dut`)的中断，
 
 ```cpp
@@ -969,7 +1049,8 @@ else {
 211   state->record_inst(commit_pc, commit_instr, dut.commit[i].wen, dut.commit[i].wdest, get_commit_data(i), dut.com    mit[i].skip != 0);
 ```
 
-若`lr/sc` 将SC的结果同步到模拟器, 仅允许成功 -> 失败的单向变动
+若 `lr/sc` 将SC的结果同步到模拟器, 仅允许成功 -> 失败的单向变动
+
 ```cpp
 213   // sync lr/sc reg status
 214   if (dut.commit[i].scFailed) {
@@ -1015,16 +1096,17 @@ else {
 
 > `Difftest::do_instr_commit`接下来的代码是针对于多核difftest的处理，放到后面章节解读。
 
-回到`Difftest::step()`中往下继续执行，
-检查`progress`标志位，若为`true`则直接返回0，跳过本次`difftest`对比
+回到 `Difftest::step()`中往下继续执行，
+检查 `progress`标志位，若为 `true`则直接返回0，跳过本次 `difftest`对比
 
 ```cpp
 if (!progress) {
   return 0;
 }
 ```
-> 使用ref的difftest接口读取 `NEMU`模拟器ref的处理器状态，将其保存到Difftest的成员ref内  
-根据提交的指令数目（变量`num_commit`），调用(`DiffState::record_group(...)`)方法将提交的指令记录入队。
+
+> 使用ref的difftest接口读取 `NEMU`模拟器ref的处理器状态，将其保存到Difftest的成员ref内
+> 根据提交的指令数目（变量 `num_commit`），调用(`DiffState::record_group(...)`)方法将提交的指令记录入队。
 
 ```cpp
   proxy->regcpy(ref_regs_ptr, REF_TO_DUT);
@@ -1043,7 +1125,7 @@ if (!progress) {
   nemu_this_pc = nemu_next_pc;
 ```
 
-此时`dut`和`ref`的处理器状态都更新到`Difftest`的`dut`和`ref`成员里，`dut_regs_ptr`和`ref_regs_ptr`指向这两个数据结果，用库函数对比`dut`和`ref`的状态值，如果一致，`memcmp`返回`0`，该函数返回`0`；否则进入条件语句内，`display()`用于打印最近历史提交的指令信息，然后打印出对比结果不同的寄存器的相关信息；返回值`1`。
+此时 `dut`和 `ref`的处理器状态都更新到 `Difftest`的 `dut`和 `ref`成员里，`dut_regs_ptr`和 `ref_regs_ptr`指向这两个数据结果，用库函数对比 `dut`和 `ref`的状态值，如果一致，`memcmp`返回 `0`，该函数返回 `0`；否则进入条件语句内，`display()`用于打印最近历史提交的指令信息，然后打印出对比结果不同的寄存器的相关信息；返回值 `1`。
 
 ```cpp
 if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
@@ -1059,22 +1141,23 @@ if (memcmp(dut_regs_ptr, ref_regs_ptr, DIFFTEST_NR_REG * sizeof(uint64_t))) {
   return 0;
 ```
 
-
 #### 多核Difftest的处理
 
-多核心下的每一个dut会对应一个ref进行difftest验证。由前面所述可知，dut每一个核心在提交指令后进行相关检查、让ref执行同样的指令然后作结果对比。如果说每一个核心在不同的地址区间store那么difftest环境目前不会出现什么问题。但是由于一致性问题，dut中一个核load指令对应的数据可能会被其他核修改过，这会导致一个问题：ref并不知道这个load地址对应的数据被其他核修改了，此时若不加处理让ref执行同样的load指令则ref在它自己单独的内存上取出的数据一定和dut不一致。  
-> 如何处理这个情况呢？  
-前面说到emu里维护了一个名为`golden mem`的第三方内存区域用来维护一个最新的数据区域（由于dut的缓存非写通策略导致dut对应的内存区域emu中的ram在某时刻并不会保持运行时最新数据，需要维护一个保持运行时的最新数据的内存映射区域，这个区域应当是由dut来更新的——因为dut多核心缓存一致性的原因，可以在`difftest/src/test/csrc/difftest/goldenmem.cpp`查看相关源码，在上一节Difftest::step()的注释中可以看到`do_golden_memory_update()`根据每个核心dut.sbuffer的store指令来更新这个最新数据内存区域。
+多核心下的每一个dut会对应一个ref进行difftest验证。由前面所述可知，dut每一个核心在提交指令后进行相关检查、让ref执行同样的指令然后作结果对比。如果说每一个核心在不同的地址区间store那么difftest环境目前不会出现什么问题。但是由于一致性问题，dut中一个核load指令对应的数据可能会被其他核修改过，这会导致一个问题：ref并不知道这个load地址对应的数据被其他核修改了，此时若不加处理让ref执行同样的load指令则ref在它自己单独的内存上取出的数据一定和dut不一致。
 
-接下来具体看源码中怎么利用这个`golden mem`的第三方内存区域处理一致性带来的Difftest的问题
+> 如何处理这个情况呢？
+> 前面说到emu里维护了一个名为 `golden mem`的第三方内存区域（全局内存）用来维护一个最新的数据区域（由于dut的缓存非写通策略导致dut对应的内存区域emu中的ram在某时刻并不会保持运行时最新数据，需要维护一个保持运行时的最新数据的内存映射区域，这个区域应当是由dut来更新的——因为dut多核心缓存一致性的原因，可以在 `difftest/src/test/csrc/difftest/goldenmem.cpp`查看相关源码，在上一节Difftest::step()的注释中可以看到 `do_golden_memory_update()`根据每个核心dut.sbuffer的store指令来更新这个最新数据内存区域。
 
-在处理未携带中断/异常的指令处理函数`Difftest::do_instr_commit(int i)`中的末尾，会针对于多核 `difftest`环境下的 `load`指令进行检查：  
-到这一步时，`dut`和 `ref`都执行了相同的 `load`指令（`mmio`的 `load`指令在上面已经 `return`）  
-1. 判断dut和ref的load结果是否一致（不一致执行步骤2）： 第247行`if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != get_commit_data(i))`判断 `dut`是 `load`指令且但 `ref`加载的 `data`与 `dut`加载的 `data`不相等；也就是说这一步判断dut和ref执行同样的load后写回的结果是否不一致，若不一致则需要去判断是否是dut多核心的一致性带来的，若是数据的一致性导致ref执行load的结果不一样，我们需要将该正确的数据更新到ref的内存和寄存器转态中；  
-2. 读取正确的load值（存放在变量`golden`）然后执行步骤3：此时在 `第271行`执行 `read_goldenmem(dut.load[i].paddr, &golden, len);`读取该load指令地址在`golden mem`上的数据，该数据是多核心一致性下该地址addr的最新数据，也是正确的数据
-3. 判断dut load的结果与`golden`是否相等来执行ref的同步：第280行`if (golden == get_commit_data(i))`判断`golden mem`load addr的数据data是否等于dut的load提交的数据data。若相等，则调用ref接口 `proxy->memcpy`将该load的数据（也就是将由其他核心store操作更新的数据）拷贝到ref（NEMU）的内存中，完成了将dut由于多核心将需要保持一致性的数据也更新到ref中，此时将一致性的数据已经更新到ref的内存了，但是注意，ref执行的load指令的结果仍然是错误的，需要将正确的load之后的寄存器的值同步到ref，这里使用ref的接口`proxy->regcpy`来同步正确的寄存器状态（见282-285）；
+接下来具体看源码中怎么利用这个 `golden mem`的第三方内存区域处理一致性带来的Difftest的问题
+
+在处理未携带中断/异常的指令处理函数 `Difftest::do_instr_commit(int i)`中的末尾，会针对于多核 `difftest`环境下的 `load`指令进行检查：到这一步时，`dut`和 `ref`都执行了相同的 `load`指令（`mmio`的 `load`指令在上面已经 `return`）
+
+1. 判断dut和ref的load结果是否一致（不一致执行步骤2）： 第247行 `if (dut.commit[i].wen && ref_regs_ptr[dut.commit[i].wdest] != get_commit_data(i))`判断 `dut`是 `load`指令且但 `ref`加载的 `data`与 `dut`加载的 `data`不相等；也就是说这一步判断dut和ref执行同样的load后写回的结果是否不一致，若不一致则需要去判断是否是dut多核心的一致性带来的，若是数据的一致性导致ref执行load的结果不一样，我们需要将该正确的数据更新到ref的内存和寄存器转态中；
+2. 读取正确的load值（存放在变量 `golden`）然后执行步骤3：此时在 `第271行`执行 `read_goldenmem(dut.load[i].paddr, &golden, len);`读取该load指令地址在 `golden mem`上的数据，该数据是多核心一致性下该地址addr的最新数据，也是正确的数据
+3. 判断dut load的结果与 `golden`是否相等来执行ref的同步：第280行 `if (golden == get_commit_data(i))`判断 `golden mem`load addr的数据data是否等于dut的load提交的数据data。若相等，则调用ref接口 `proxy->memcpy`将该load的数据（也就是将由其他核心store操作更新的数据）拷贝到ref（NEMU）的内存中，完成了将dut由于多核心将需要保持一致性的数据也更新到ref中，此时将一致性的数据已经更新到ref的内存了，但是注意，ref执行的load指令的结果仍然是错误的，需要将正确的load之后的寄存器的值同步到ref，这里使用ref的接口 `proxy->regcpy`来同步正确的寄存器状态（见282-285）；
 4. 判断是否为原子指令并做ref的同步：如果上诉条件不相等并且dut的load事件为atomic，重复步骤3的ref同步操作
-5. 若步骤3、4的条件都不成立则认为`SMP difftest mismatch!`,将ref中load的addr对应的数据拷贝出来打印输出以Debug；
+5. 若步骤3、4的条件都不成立则认为 `SMP difftest mismatch!`,将ref中load的addr对应的数据拷贝出来打印输出以Debug；
+
 ```cpp
 243   // Handle load instruction carefully for SMP
 244   if (NUM_CORES > 1) {

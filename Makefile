@@ -8,14 +8,24 @@ cpp_files = $(shell find $(cpp_dir) -name "*.cpp")
 EMU_MK = $(BUILD_DIR)/verilator-out/V$(TOP_NAME).mk
 EMU = $(BUILD_DIR)/emu
 
-default: run
+
+# verilator arguements
+EMU_CXXFLAGS += -std=c++11 -static -Wall
+EMU_COVERAGE ?= 0
 
 verilator_flag = --cc --exe --top-module $(TOP_NAME) \
 	-I$(BUILD_DIR) \
 	-Mdir $(BUILD_DIR)/verilator-out \
+	-CFLAGS "$(EMU_CXXFLAGS)" \
 	-o $(EMU) \
 	--trace
 
+ifeq ($(EMU_COVERAGE),1)
+verilator_flag += --coverage-line --coverage-toggle
+EMU_CXXFLAGS += -DVM_COVERAGE
+endif
+
+default: run
 
 $(EMU_MK): $(verilog_files) $(cpp_files)
 	@mkdir -p $(BUILD_DIR)

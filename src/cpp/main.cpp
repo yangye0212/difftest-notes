@@ -3,8 +3,8 @@
 // verilator
 #include <VSimTop.h>
 
-#define VCD_ENABLE  // gen vcd wave
-#ifdef VCD_ENABLE
+#define VM_TRACE  // gen vcd wave
+#ifdef VM_TRACE
 #include <verilated_vcd_c.h>  // Trace file format header
 #endif
 
@@ -16,7 +16,7 @@ private:
   VSimTop *dut;
   enum { RUN, STOP };
   uint64_t state;
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
   VerilatedVcdC* tfp;
   uint64_t vcd_times;
 #endif
@@ -31,7 +31,7 @@ public:
 };
 
 Emu::Emu(/* args */): dut(new VSimTop) {
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
   vcd_times = 0;
 #endif
 }
@@ -45,13 +45,13 @@ void Emu::reset_n(uint64_t n) {
     dut->reset = 1;
     dut->clock = 0;
     dut->eval();
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
     tfp->dump(vcd_times++);
 #endif
     dut->clock = 1;
     dut->eval();
     dut->reset = 0;
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
     tfp->dump(vcd_times++);
 #endif
   }
@@ -60,18 +60,18 @@ void Emu::reset_n(uint64_t n) {
 void Emu::single_cycle() {
   dut->clock = 0;
   dut->eval();
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
   tfp->dump(vcd_times++);
 #endif
   dut->clock = 1;
   dut->eval();
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
   tfp->dump(vcd_times++);
 #endif
 }
 
 void Emu::execute() {
-#ifdef VCD_ENABLE
+#ifdef VM_TRACE
     Verilated::traceEverOn(true);	// Verilator must compute traced signals
     VL_PRINTF("Enabling waves...\n");
     tfp = new VerilatedVcdC;
@@ -88,11 +88,15 @@ void Emu::execute() {
     // run a cycle
     single_cycle();
   }
-#ifdef VCD_ENABLE
+  printf("\t simulation: end ...\t\n");
+#ifdef VM_TRACE
   tfp->close();
 #endif
   dut->final();
-  printf("\t simulation: end ...\t\n");
+#if VM_COVERAGE
+  Verilated::mkdir("logs");
+  Verilated::threadContextp()->coveragep()->write("logs/coverage.dat");
+#endif
 }
 
 
